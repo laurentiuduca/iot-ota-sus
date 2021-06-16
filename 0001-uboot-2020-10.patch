@@ -1,0 +1,194 @@
+diff -Naur uboot-2020.10/arch/arm/mach-bcm283x/include/mach/wdog.h uboot-2020.10-2/arch/arm/mach-bcm283x/include/mach/wdog.h
+--- uboot-2020.10/arch/arm/mach-bcm283x/include/mach/wdog.h	2021-06-07 16:48:56.704176695 +0300
++++ uboot-2020.10-2/arch/arm/mach-bcm283x/include/mach/wdog.h	2021-05-25 17:12:59.126424389 +0300
+@@ -1,5 +1,8 @@
+ /* SPDX-License-Identifier: GPL-2.0 */
+ /*
++ * (C) Copyright 2021 Laurentiu-Cristian Duca
++ * Moved some defines from reset.c to wdog.h
++ *
+  * (C) Copyright 2012,2015 Stephen Warren
+  */
+ 
+@@ -20,9 +23,17 @@
+ 
+ #define BCM2835_WDOG_PASSWORD			0x5a000000
+ 
++/*
++ * The Raspberry Pi firmware uses the RSTS register to know which partiton
++ * to boot from. The partiton value is spread into bits 0, 2, 4, 6, 8, 10.
++ * Partiton 63 is a special partition used by the firmware to indicate halt.
++ */
++#define BCM2835_WDOG_RSTS_RASPBERRYPI_HALT      0x555
++
++/* max ticks timeout */
++#define BCM2835_WDOG_MAX_TIMEOUT        	0x000fffff
++#define BCM2835_WDOG_RSTC_RESET         	0x00000102
+ #define BCM2835_WDOG_RSTC_WRCFG_MASK		0x00000030
+ #define BCM2835_WDOG_RSTC_WRCFG_FULL_RESET	0x00000020
+ 
+-#define BCM2835_WDOG_WDOG_TIMEOUT_MASK		0x0000ffff
+-
+ #endif
+diff -Naur uboot-2020.10/arch/arm/mach-bcm283x/reset.c uboot-2020.10-2/arch/arm/mach-bcm283x/reset.c
+--- uboot-2020.10/arch/arm/mach-bcm283x/reset.c	2021-06-07 16:48:56.704176695 +0300
++++ uboot-2020.10-2/arch/arm/mach-bcm283x/reset.c	2021-06-07 16:31:20.050250956 +0300
+@@ -1,5 +1,8 @@
+ // SPDX-License-Identifier: GPL-2.0
+ /*
++ * (C) Copyright 2021 Laurentiu-Cristian Duca
++ * Modifications: code to stop the wdog and watchdog_time_left().
++ *
+  * (C) Copyright 2012 Stephen Warren
+  *
+  * See file CREDITS for list of people who contributed to this
+@@ -15,22 +18,19 @@
+ 
+ #define RESET_TIMEOUT 10
+ 
+-/*
+- * The Raspberry Pi firmware uses the RSTS register to know which partiton
+- * to boot from. The partiton value is spread into bits 0, 2, 4, 6, 8, 10.
+- * Partiton 63 is a special partition used by the firmware to indicate halt.
+- */
+-#define BCM2835_WDOG_RSTS_RASPBERRYPI_HALT	0x555
+-
+-/* max ticks timeout */
+-#define BCM2835_WDOG_MAX_TIMEOUT	0x000fffff
+-
++#ifdef CONFIG_BCM2835_WATCHDOG
++extern void __efi_runtime hw_watchdog_disable(void);
++#else
+ void hw_watchdog_disable(void) {}
++#endif
++
++#define SECS_TO_WDOG_TICKS(x) ((x) << 16)
++#define WDOG_TICKS_TO_SECS(x) ((x) >> 16)
+ 
+ __efi_runtime_data struct bcm2835_wdog_regs *wdog_regs;
+ 
+-static void __efi_runtime
+-__reset_cpu(struct bcm2835_wdog_regs *wdog_regs, ulong ticks)
++void __efi_runtime __reset_cpu(struct bcm2835_wdog_regs *wdog_regs,
++		ulong ticks)
+ {
+ 	uint32_t rstc, timeout;
+ 
+@@ -53,8 +53,33 @@
+ 	struct bcm2835_wdog_regs *regs =
+ 		(struct bcm2835_wdog_regs *)BCM2835_WDOG_PHYSADDR;
+ 
+-	__reset_cpu(regs, 0);
++	__reset_cpu(regs, ticks);
++}
++
++#ifdef DEBUG_BCM2835_WATCHDOG
++unsigned int watchdog_time_left(void)
++{
++        unsigned int ret, timeleft;
++        struct bcm2835_wdog_regs *wdog_regs =
++                (struct bcm2835_wdog_regs *)BCM2835_WDOG_PHYSADDR;
++
++        ret = readl(&wdog_regs->wdog);
++        timeleft = WDOG_TICKS_TO_SECS(ret & BCM2835_WDOG_MAX_TIMEOUT);
++
++	return timeleft;
++}
++
++bool watchdog_is_running(void)
++{
++        uint32_t cur;
++        struct bcm2835_wdog_regs *wdog_regs =
++                (struct bcm2835_wdog_regs *)BCM2835_WDOG_PHYSADDR;
++
++        cur = readl(&wdog_regs->rstc);
++
++        return !!(cur & BCM2835_WDOG_RSTC_WRCFG_FULL_RESET);
+ }
++#endif
+ 
+ #ifdef CONFIG_EFI_LOADER
+ 
+diff -Naur uboot-2020.10/drivers/watchdog/bcm2835_wdt.c uboot-2020.10-2/drivers/watchdog/bcm2835_wdt.c
+--- uboot-2020.10/drivers/watchdog/bcm2835_wdt.c	1970-01-01 02:00:00.000000000 +0200
++++ uboot-2020.10-2/drivers/watchdog/bcm2835_wdt.c	2021-06-02 13:51:39.635351663 +0300
+@@ -0,0 +1,45 @@
++/*
++ * Watchdog driver for Broadcom BCM2835
++ *
++ * Copyright (c) 2021 Laurentiu-Cristian Duca (laurentiu dot duca at gmail dot com)
++ * Modifications to hw_watchdog_disable() 
++ * and use CONFIG_WATCHDOG_TIMEOUT_MSECS in reset_cpu()
++ *
++ * Copyright (C) 2017 Paolo Pisati <p.pisati@gmail.com>
++ *
++ * SPDX-License-Identifier: GPL-2.0
++ */
++
++#include <common.h>
++#include <efi_loader.h>
++#include <asm/io.h>
++#include <asm/arch/wdog.h>
++#include <mach/wdog.h>
++
++#define SECS_TO_WDOG_TICKS(x) ((x) << 16)
++#define WDOG_TICKS_TO_SECS(x) ((x) >> 16)
++
++extern void reset_cpu(ulong ticks);
++
++#define MAX_TIMEOUT   0xf /* ~15s */
++
++static __efi_runtime_data bool enabled = true;
++
++extern void reset_cpu(ulong ticks);
++
++void hw_watchdog_reset(void)
++{
++	if (enabled)
++		reset_cpu(SECS_TO_WDOG_TICKS(MAX_TIMEOUT));
++}
++
++void hw_watchdog_init(void)
++{
++	hw_watchdog_reset();
++}
++
++void __efi_runtime hw_watchdog_disable(void)
++{
++	enabled = false;
++}
++
+diff -Naur uboot-2020.10/drivers/watchdog/Kconfig uboot-2020.10-2/drivers/watchdog/Kconfig
+--- uboot-2020.10/drivers/watchdog/Kconfig	2021-06-07 16:48:56.852175992 +0300
++++ uboot-2020.10-2/drivers/watchdog/Kconfig	2021-05-25 15:46:19.145056198 +0300
+@@ -27,6 +27,14 @@
+ 	  Disable reset watchdog, which can let WATCHDOG_RESET invalid, so
+ 	  that the watchdog will not be fed in u-boot.
+ 
++config BCM2835_WATCHDOG
++        bool "Enable BCM2835/2836 watchdog driver"
++        select HW_WATCHDOG
++        help
++          Say Y here to enable the BCM2835/2836 watchdog.
++          This provides basic infrastructure to support BCM2835/2836 watchdog
++          hardware.
++
+ config IMX_WATCHDOG
+ 	bool "Enable Watchdog Timer support for IMX and LSCH2 of NXP"
+ 	select HW_WATCHDOG if !WDT
+diff -Naur uboot-2020.10/drivers/watchdog/Makefile uboot-2020.10-2/drivers/watchdog/Makefile
+--- uboot-2020.10/drivers/watchdog/Makefile	2021-06-07 16:48:56.852175992 +0300
++++ uboot-2020.10-2/drivers/watchdog/Makefile	2021-05-25 15:46:26.049017926 +0300
+@@ -11,6 +11,7 @@
+ obj-$(CONFIG_IMX_WATCHDOG) += imx_watchdog.o
+ endif
+ obj-$(CONFIG_S5P)               += s5p_wdt.o
++obj-$(CONFIG_BCM2835_WATCHDOG) += bcm2835_wdt.o
+ obj-$(CONFIG_XILINX_TB_WATCHDOG) += xilinx_tb_wdt.o
+ obj-$(CONFIG_OMAP_WATCHDOG) += omap_wdt.o
+ obj-$(CONFIG_DESIGNWARE_WATCHDOG) += designware_wdt.o
+@@ -34,3 +35,4 @@
+ obj-$(CONFIG_WDT_STM32MP) += stm32mp_wdt.o
+ obj-$(CONFIG_WDT_TANGIER) += tangier_wdt.o
+ obj-$(CONFIG_WDT_XILINX) += xilinx_wwdt.o
++

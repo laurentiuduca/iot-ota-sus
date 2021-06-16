@@ -1,0 +1,3 @@
+NTPSERVERS=1.pool.ntp.org
+NTPDATE=ntpdate
+

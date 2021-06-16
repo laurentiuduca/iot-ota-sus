@@ -1,0 +1,24 @@
+software = {
+    version = "0.1.0";
+    rootfs = {
+        rootfs-1: {
+            images: (
+            {
+                filename = "rootfs.ext4.gz";
+                # zlib must be enabled in buildroot & swupdate                            
+		compressed = "zlib";
+                device = "/dev/mmcblk0p2";
+            });
+        }
+        rootfs-2: {
+            images: (
+            {
+                filename = "rootfs.ext4.gz";
+                # zlib must be enabled in buildroot & swupdate
+                compressed = "zlib";
+                device = "/dev/mmcblk0p3";
+            });
+        }
+    }
+}
+

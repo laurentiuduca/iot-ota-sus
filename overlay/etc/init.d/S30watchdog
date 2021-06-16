@@ -1,0 +1,45 @@
+#!/bin/sh
+
+NAME="watchdog"
+#DAEMON="/sbin/${NAME}"
+#DAEMON_ARGS=""
+
+start()
+{
+	printf "Starting ${NAME}: "
+	/sbin/watchdog
+	#start-stop-daemon -S -q -x "${DAEMON}" -- ${DAEMON_ARGS}
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+}
+
+stop()
+{
+	printf "Stopping ${NAME}: "
+	# This daemon does not exit properly with the default TERM signal unless
+	# it's forced to work by something reading /dev/random. Killing it and
+	# removing its PID file is more straightforward.
+	#if start-stop-daemon -K -q -s KILL -n "${NAME}"; then
+	#	echo "OK"
+	#else
+	#	echo "FAIL"
+	#fi
+	killall watchdog
+	[ $? = 0 ] && echo "OK" || echo "FAIL"
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	restart|reload)
+		stop
+		start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|reload}" >&2
+		exit 1
+		;;
+esac
