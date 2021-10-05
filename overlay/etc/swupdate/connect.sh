@@ -17,7 +17,9 @@ done
 
 # autoconnect if server restarts
 while [[ 1 -eq 1 ]]; do
-    curl -v --cacert "${CERTIFICATE_LOCATION}" --user 'admin:admin' "${HAWKBIT_URL}/rest/v1/targets" -i -X POST -H 'Content-Type: application/json;charset=UTF-8' -d "[ {\"securityToken\" : \"${TARGET_TOKEN}\", \"controllerId\" : \"${TARGET_ID}\",\"name\" : \"${TARGET_ID}\", \"description\" : \"Controller ${TARGET_ID}\"} ]"
+    /root/encipher-decipher.out 2
+    echo "connect command returns $?"
+#    curl -v --cacert "${CERTIFICATE_LOCATION}" --user 'admin:admin' "${HAWKBIT_URL}/rest/v1/targets" -i -X POST -H 'Content-Type: application/json;charset=UTF-8' -d "[ {\"securityToken\" : \"${TARGET_TOKEN}\", \"controllerId\" : \"${TARGET_ID}\",\"name\" : \"${TARGET_ID}\", \"description\" : \"Controller ${TARGET_ID}\"} ]"
     sleep 300
 done
 
