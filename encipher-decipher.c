@@ -40,7 +40,11 @@ int main(int argc, char *argv[])
 	k[0]=0x3333; k[1]=k[2]=k[3]=0;
 	if(argc == 3) {
 		//u[0]=0x11111111; u[1]=0x22222222;
-		// u[1]=909cfbff u[0]=84f50b7d p[1]=909cfbff p[0]=84f50b7d =>  u='admin' p='admin' 
+		// u[1]=909cfbff u[0]=84f50b7d p[1]=909cfbff p[0]=84f50b7d =>  u='admin' p='admin' 		
+		if(strlen(argv[1]) >= 8 || strlen(argv[2]) >= 8) {
+			printf("Error: username and password must be <= 8 characters\n");
+			return -1;
+		}
 		u[0] = u[1] = 0;
 		strcpy((unsigned char *)u, argv[1]);
 		p[0] = p[1] = 0;
