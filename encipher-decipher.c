@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
 	if(argc == 3) {
 		//u[0]=0x11111111; u[1]=0x22222222;
 		// u[1]=909cfbff u[0]=84f50b7d p[1]=909cfbff p[0]=84f50b7d =>  u='admin' p='admin' 		
-		if(strlen(argv[1]) >= 8 || strlen(argv[2]) >= 8) {
+		if(strlen(argv[1]) > 8 || strlen(argv[2]) > 8) {
 			printf("Error: username and password must be <= 8 characters\n");
 			return -1;
 		}
