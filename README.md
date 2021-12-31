@@ -4,7 +4,7 @@ We present an Over-The-Air secure and scalable update system for Internet of Thi
 which run embedded Linux. The system uses the SWUpdate Linux update agent and Eclipse hawkBit framework 
 to offer a scalable and server and client fault tolerant update mechanism for IoT fleets where no physical access is 
 available.  Security  is  achieved  using  the  Linux  OpenSSL  library.  By  using  Buildroot  we  implement  a  complete 
-automated build system. 
+automated build system. The test is made on the cheap and handy Raspberry Pi Zero W. 
 
 The documentation paper can be downloaded from:
 https://www.ijana.in/download13-3-7.php?file=V13I3-7.pdf
